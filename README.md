@@ -20,7 +20,7 @@
 |---|---|
 | `daq.c` | EdgeDAQ 完全体：FIFO 读端 + 切行分发 + 内嵌线程池 + 信号全链（SIGTERM 优雅停机 / SIGHUP 日志重开）+ 六步守护进程化，编译为 `daqmond` |
 | `sensor.c` | 传感器进程（模拟版）：按名字（temp/humi/light）自生成读数、每秒一条写入同一 FIFO，种子 `srand(time^pid)` 保证多进程不撞数据 |
-| `sensor_board.c` | 传感器进程（板级真实版）：骨架同 `sensor.c`，temp 走 ICM-20608 read、light/prox 走 AP3216C ioctl；读失败写 `value=-1` 占位保 seq 对齐；交叉编译后在板上运行 |
+| `sensor_board.c` | 传感器进程（板级真实版）：骨架同 `sensor.c`，temp 走 ICM-20608 read、light/prox 走 AP3216C ioctl；读数调用失败时仅 perror 提示后继续（暂无失败占位逻辑）；交叉编译后在板上运行 |
 | `ap3216_ioctl.c` | AP3216C 探针：ioctl 三命令字（IR/ALS/PS）读取验证，先打印命令字自检宏展开 |
 | `icm20608_read.c` | ICM-20608 探针：read 一帧 7 个原始值并换算温度，以物理自洽验收（静止时一轴 ≈1g、陀螺近零、结温略高于室温，翻面时 1g 换轴变号） |
 | `daqmond.c` | Week 1–2 的守护进程：六步骨架、3 个工作子进程的派生与状态回收、5 秒心跳、信号驱动的优雅退出与日志重开 |
