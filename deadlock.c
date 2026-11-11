@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 pthread_mutex_t mutex1,mutex2;
 
@@ -39,10 +40,10 @@ int main(int argc,char *argv[])
 {
     pthread_t tid1,tid2;
     int ret;
-
+    
     pthread_mutex_init(&mutex1,NULL);
     pthread_mutex_init(&mutex2,NULL);
-
+    
     ret=pthread_create(&tid1,NULL,thread1_start,NULL);
     if(ret)
     {

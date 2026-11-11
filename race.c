@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 int count=0;
 static void *new_thread_start(void *arg)

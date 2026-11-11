@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 int count=0;
 pthread_mutex_t mutex;
@@ -56,7 +57,6 @@ int main(int argc,char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    pthread_mutex_destroy(&mutex);
     printf("count:%d\n",count);
     exit(EXIT_SUCCESS);
 }

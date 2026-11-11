@@ -201,10 +201,13 @@ int main()
     setvbuf(stdout,NULL,_IOLBF,0);
 
     int n=0;
-    struct sigaction sig_term={0};
-    struct sigaction sig_hup={0};
+    struct sigaction sig_term;
+    struct sigaction sig_hup;
     int ret;
 
+    memset(&sig_term, 0, sizeof(sig_term));
+    memset(&sig_hup, 0, sizeof(sig_hup));
+    
     sig_term.sa_handler=TERM_handler;
     sig_term.sa_flags=0;
     sigemptyset(&sig_term.sa_mask);
