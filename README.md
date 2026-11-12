@@ -1,6 +1,6 @@
 # EdgeDAQ
 
-嵌入式 Linux 数据采集系统。形态：多进程 + 多线程的数据采集守护进程——多个传感器进程经命名管道（FIFO）汇入主进程，主进程切行分发、线程池并行处理、加锁落盘；信号实现优雅停机与日志轮转；最终以六步骨架守护进程化为 `daqmond`。2026 年 11 月已移植到正点原子 i.MX6ULL 开发板，接入真实传感器（ICM-20608 六轴陀螺仪内置温度 + AP3216C 环境光/接近），主进程代码零改动。后续扩展 LCD 显示与网络传输。
+嵌入式 Linux 数据采集系统。形态：多进程 + 多线程的数据采集守护进程——多个传感器进程经命名管道（FIFO）汇入主进程，主进程切行分发、线程池并行处理、加锁落盘；信号实现优雅停机与日志轮转；最终以六步骨架守护进程化为 `daqmond`。2026 年 11 月已移植到正点原子 i.MX6ULL 开发板，接入真实传感器（ICM-20608 六轴陀螺仪内置温度 + AP3216C 环境光/接近），主进程代码零改动；并已完成 LCD 实时显示（独立消费者进程读数据文件尾部刷新屏幕），后续扩展网络传输。
 
 ## 当前进度
 
@@ -8,7 +8,7 @@
 - **Week 2**：守护进程 v2（信号控制）+ 线程竞态实验台——sigaction + `volatile sig_atomic_t` 标志实现 SIGTERM/SIGINT 优雅退出、SIGHUP 日志重开（配合 logrotate 式归档）；竞态复现、互斥锁修复对照与锁粒度测量、AB-BA 死锁复现与 gdb 定位。
 - **Week 3**：FIFO 进程间通信 + 线程池引擎——FIFO 单向通道与双向聊天室（镜像打开顺序、EOF 语义）；线程池：环形任务队列、一把 mutex + 一个条件变量、signal/broadcast 分工、排空式退出。
 - **Week 4（总装）**：EdgeDAQ 完全体——3 个自生成传感器进程（温度/湿度/光照）共用一条 FIFO 送数；主进程阻塞读、按行切分、每行堆拷贝后投递线程池（所有权：主线程申请、工人释放）；4 工人加锁写数据文件；SIGTERM 全链优雅停机（排空不丢数据，写端经 SIGPIPE 自行退出）、SIGHUP 数据日志重开（轮转后按路径重开）；守护进程化后 PPID=1、无控制终端，轮转 + 停机全程零丢失（实测 27+9=36 与任务计数一致）。
-- **板级阶段（11 月 10–11 日）**：daq 零改动交叉编译上板，`sensor_board.c` 把三路数据源换成真实芯片读数（FIFO 文本行接口不变）：temp ← ICM-20608 的 read（28 字节一帧，温度为芯片结温），light/prox ← AP3216C 的 ioctl。板上验收：三路并发各 20 条，数据文件恰好 60 行、每路 seq 1~20 完整、无撕裂无丢失，EOF 后 daq 排空退出。
+- **板级阶段（11 月 10–11 日）**：daq 零改动交叉编译上板，`sensor_board.c` 把三路数据源换成真实芯片读数（FIFO 文本行接口不变）：temp ← ICM-20608 的 read（28 字节一帧，温度为芯片结温），light/prox ← AP3216C 的 ioctl。板上验收：三路并发各 20 条，数据文件恰好 60 行、每路 seq 1~20 完整、无撕裂无丢失，EOF 后 daq 排空退出。随后完成 LCD 显示三步：FrameBuffer 参数摸底与填色（1024×600、RGB565、行偏移一律用驱动返回的 line_length）、8×16 点阵字库静态界面、实时数据上屏（lcd_show 每秒读数据文件尾部 4KB、按传感器名锚点取每路最新值重画，SIGINT 只置标志优雅退出并清屏）。
 
 ### 板级移植踩坑实录：出厂版 AP3216C 驱动没有 read
 
@@ -23,6 +23,9 @@
 | `sensor_board.c` | 传感器进程（板级真实版）：骨架同 `sensor.c`，temp 走 ICM-20608 read、light/prox 走 AP3216C ioctl；读数调用失败时仅 perror 提示后继续（暂无失败占位逻辑）；交叉编译后在板上运行 |
 | `ap3216_ioctl.c` | AP3216C 探针：ioctl 三命令字（IR/ALS/PS）读取验证，先打印命令字自检宏展开 |
 | `icm20608_read.c` | ICM-20608 探针：read 一帧 7 个原始值并换算温度，以物理自洽验收（静止时一轴 ≈1g、陀螺近零、结温略高于室温，翻面时 1g 换轴变号） |
+| `lcd_test.c` | FrameBuffer 摸底：ioctl 读回分辨率/色深/line_length 并 mmap 填三横条，验证颜色通道与行偏移 |
+| `lcd_show.c` | LCD 显示进程：独立消费者——点阵字库绘图（draw_pixel/char/string，scale 放大）+ 每秒读数据文件尾部解析三路最新值重画；SIGINT 标志位优雅退出；与采集链路零耦合 |
+| `font8x16.h` | ASCII 32~126 的 8×16 点阵字库（每字 16 字节、高位在左），由 DejaVu Sans Mono Bold 渲染生成 |
 | `daqmond.c` | Week 1–2 的守护进程：六步骨架、3 个工作子进程的派生与状态回收、5 秒心跳、信号驱动的优雅退出与日志重开 |
 | `runner.c` | 工作子进程的 exec 目标（由 daqmond 派生执行） |
 | `fork.c` / `exec.c` | 进程基础实验：fork 语义与 exec 族替换 |
@@ -80,4 +83,7 @@ arm-linux-gnueabihf-gcc -std=gnu99 -Wall -o sensor sensor_board.c
 ./sensor light 20 &           # AP3216C 环境光（原始计数）
 ./sensor prox 20 &            # AP3216C 接近（0~1023，随手距变化）
 wc -l /tmp/edgedaq_data.log   # 期望 60，三路各 20
+
+arm-linux-gnueabihf-gcc -std=gnu99 -Wall -o lcd_show lcd_show.c   # 需与 font8x16.h 同目录
+./lcd_show                    # LCD 每秒刷新三路最新值，Ctrl+C 优雅退出（清屏）
 ```
